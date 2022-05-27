@@ -63,10 +63,10 @@ def query_ncbi(accesion_list,empty_datab):
         print(count)
         
 
-        #TODO rebuild using tax_handle = Entrez.efetch(db="Nucleotide", id=acc, retmode="xml")
+        #TODO rebuild using tax_handle = Entrez.efetch(db="Nucleotide", id=acc_list[0] +' ,'+ ' ,'.join(acc_list[1:]), retmode="xml")
         # record = Entrez.read(tax_handle)
         # record[0]['GBSeq_source']
-        
+
     return sci_dict
 
 
