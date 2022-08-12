@@ -318,8 +318,8 @@ def calc_average_identity_coverage_per_species (id_sci_dict):
     return(average_id_dict)
 
 def main(arg):
-    #Entrez.email = os.environ.get("EMAIL_KEY")
-    #Entrez.api_key = os.environ.get("SECRET_KEY")
+    Entrez.email = os.environ.get("EMAIL_KEY")
+    Entrez.api_key = os.environ.get("SECRET_KEY")
 
     blast_name = arg.blast_output
     blast_dict, query_coverage_dict, identity_dict = collect_first_records(blast_name)
