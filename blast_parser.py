@@ -15,6 +15,8 @@ import lxml
 from bs4 import BeautifulSoup
 import xml.etree.ElementTree as ET
 import gc
+import pickle
+import csv
 
 
 def collect_first_records(blast_frame):
@@ -23,30 +25,49 @@ def collect_first_records(blast_frame):
 
     hash_start = False
     acc_dict = {}
-
+    per_q_dict = {}
+    per_i_dict = {}
     count=0
     for line in Lines:
         if line[0] == "#":
             hash_start = True
         if hash_start == True and line[0] != "#":
             acc = str.split(line, ",")[1]
+            perc_query = str.split(line,",")[5]
+            perc_ident = str.split(line,",")[6]
             if acc not in acc_dict.keys():
                 acc_dict[acc] = 1
                 hash_start= False
                 count= count+1
-            else:
+            if acc in acc_dict.keys():
                 acc_dict[acc] = acc_dict[acc] + 1
                 hash_start = False
                 count = count+1
+            if acc not in per_q_dict.keys():
+                per_q_dict[acc] = list([float(perc_query)])
+                hash_start = False
+            if acc in per_q_dict.keys():
+                per_q_dict[acc].append(float(perc_query))
+                hash_start = False
+            if acc not in per_i_dict.keys():
+                per_i_dict[acc] = list([float(perc_ident)])
+                hash_start = False
+            if acc in per_i_dict.keys():
+                 per_i_dict[acc].append(float(perc_query))
+                 hash_start = False
+        
+        
+                 
         #Swap these hash starts to use all of the records in the file
         #elif hash_start == True and line[0] == "#":
         #    hash_start = False
         #    continue
+
     gc.collect()
     print("record count: "+str(count))
     acc_dict_sorted = sorted(
         acc_dict.items(), key=lambda x: x[1], reverse=True)
-    return acc_dict_sorted
+    return [acc_dict_sorted, per_q_dict, per_i_dict]
 
 
 def initiate_database():
@@ -79,10 +100,10 @@ def query_ncbi_xml(accesion_list, current_database, api_key):
         del acc_dict[item] 
 
     accesion_list = list(acc_dict.items())
-    print(accesion_list)
+    #print(accesion_list)
     unzipped = [[i for i, j in accesion_list],
                 [j for i, j in accesion_list]]
-    print(unzipped)
+    #print(unzipped)
     if unzipped != [[],[]]:
         
         try:
@@ -93,7 +114,7 @@ def query_ncbi_xml(accesion_list, current_database, api_key):
             except IndexError:
                 pass
 
-        print(id_list)
+        #print(id_list)
         gc.collect()
         
         try:
@@ -173,9 +194,6 @@ def query_ncbi(accesion_list, current_database):
     return(sci_dict, current_database)
     
 
-    
-
-
 def create_batches(accesion_list, batch_size, divider):
     batch_list = []
     for i in range(0, divider):
@@ -205,14 +223,109 @@ def write_res_tab_to_file(res_table,res_name):
     
     res_df = pd.DataFrame([name_list, list(res_table.values())]).T
     res_df.to_csv(res_name,index=False)
+    return res_df
 
+def g_mean(x):
+    # from https://www.statology.org/geometric-mean-python/
+    #input: list of int != 0
+    #output: geometric mean of list
+    x =[i for i in x if i !=0]
+    a = np.log(x)
+    return round(np.exp(a.mean()),2)
+
+
+def convert_acc_query_coverage_dict_to_sci_qc_dict(database, query_acc_dict):
+    database = database.sort_values(by='Scientific')
+    sci_qc_dict = {}
+    missing_acc = []
+
+    #qafile = open('query_acc_dict.bjl', 'ab')
+    #pickle.dump(query_acc_dict,qafile)
+    #qafile.close()
+
+    for item in database.iterrows():
+        sci_name = item[1][2]
+        acc = item[1][0]
+        if sci_name not in sci_qc_dict:
+            if query_acc_dict.get(acc) != None:
+                sci_qc_dict[sci_name] = query_acc_dict.get(acc)
+        elif sci_name in sci_qc_dict:
+            try:
+                val_list = query_acc_dict.get(acc)
+                #print("valist: " + str(val_list))
+                for value in val_list:
+                    #print("value: " + str(value))
+                    list(sci_qc_dict[sci_name]).append(value)
+            except TypeError as ex3:
+                missing_acc.append(acc)
+
+    #mafile = open('missing_acc.bjl', 'ab')
+    #pickle.dump(missing_acc, mafile)
+    #mafile.close()
+
+    #dbfile = open("database.bjl", 'ab')
+    #pickle.dump(database,dbfile )
+    #dbfile.close()
+    return sci_qc_dict, missing_acc
+
+def convert_acc_identify_dict_to_sci_ident_dict(database, ident_acc_dict):
+    database = database.sort_values(by='Scientific')
+    sci_id_dict = {}
+    missing_acc = []
+
+    #idfile = open('id_acc_dict.bjl', 'ab')
+    #pickle.dump(query_acc_dict,idfile)
+    #idfile.close()
+
+    for item in database.iterrows():
+        sci_name = item[1][2]
+        acc = item[1][0]
+        if sci_name not in sci_id_dict:
+            if ident_acc_dict.get(acc) != None:
+                sci_id_dict[sci_name] = ident_acc_dict.get(acc)
+        elif sci_name in sci_id_dict:
+            try:
+                val_list = ident_acc_dict.get(acc)
+                #print("valist: " + str(val_list))
+                for value in val_list:
+                    #print("value: " + str(value))
+                    list(sci_id_dict[sci_name]).append(value)
+            except TypeError as ex3:
+                missing_acc.append(acc)
+    #mafile = open('missing_acc.bjl', 'ab')
+    #pickle.dump(missing_acc, mafile)
+    #mafile.close()
+
+    #dbfile = open("database.bjl", 'ab')
+    #pickle.dump(database,dbfile )
+    #dbfile.close()
+    return sci_id_dict, missing_acc
+
+
+def calc_average_query_coverage_per_species (query_sci_dict):
+    average_q_dict = {}
+    for item in query_sci_dict.keys():
+        query_list = query_sci_dict[item]
+        average_q_dict[item] = g_mean(query_list)
+    return(average_q_dict)
+        
+
+def calc_average_identity_coverage_per_species (id_sci_dict):
+    average_id_dict = {}
+    for item in id_sci_dict.keys():
+        id_list = id_sci_dict[item]
+        average_id_dict[item] = g_mean(id_list)
+    return(average_id_dict)
 
 def main(arg):
-    Entrez.email = os.environ.get("EMAIL_KEY")
-    Entrez.api_key = os.environ.get("SECRET_KEY")
+    #Entrez.email = os.environ.get("EMAIL_KEY")
+    #Entrez.api_key = os.environ.get("SECRET_KEY")
 
     blast_name = arg.blast_output
-    blast_dict = collect_first_records(blast_name)
+    blast_dict, query_coverage_dict, identity_dict = collect_first_records(blast_name)
+
+    #print(query_coverage_dict)
+    #print(identity_dict)
 
     batch_size , divider = calc_batch_size(blast_dict)
 
@@ -255,8 +368,33 @@ def main(arg):
     #print(sum(result_table.values()))
 
     write_db_to_file(current_db,db_name)
-    write_res_tab_to_file(result_table,res_name)
+    res_df = write_res_tab_to_file(result_table,res_name)
 
+    sci_query_coverage_dict, missing_qc_acc = convert_acc_query_coverage_dict_to_sci_qc_dict(current_db, query_coverage_dict)
+    
+    sci_id_coverage_dict, missing_id_acc = convert_acc_identify_dict_to_sci_ident_dict(current_db, identity_dict)
+
+    
+    #with open('test.csv', 'w') as f:
+    #    for key in sci_query_coverage_dict.keys():
+    #        f.write("%s, %s\n" % (key, sci_query_coverage_dict[key]))
+
+    query_coverage_dict = calc_average_query_coverage_per_species(sci_query_coverage_dict)
+    identity_dict = calc_average_identity_coverage_per_species(sci_id_coverage_dict)
+    
+    
+    qc_id_table = pd.concat([pd.DataFrame(query_coverage_dict, index=[0]).T,pd.DataFrame(identity_dict, index=[0]).T], axis=1)
+    qc_id_table.columns = ['ave_query_coverage','ave_identitiy']
+
+    res_df.columns = ['taxa','count']
+    res_df.set_index('taxa', inplace=True)
+    qc_id_table.index.name = 'taxa'
+
+    joined_table = res_df.join(qc_id_table, how='outer')
+
+    joined_table.to_csv(res_name[:-4]+"_more_info.csv",index=True)
+
+   
     # print(batch_list)
 
     
