@@ -421,7 +421,7 @@ if __name__ == "__main__":
                         help="name of the database from previous runs", dest='database')
     parser.add_argument('-o','--dbo', action='store',required=False, help="name of the database to save to disk", dest='database_file')
     parser.add_argument('-n','--res_o', action='store',required=False, help="name of the result to save to disk", dest='result_file')
-    parser.add_argument('-v', '--verb', action='store', required=False, help="verbose output to the terminal", dest='verbose')
+    parser.add_argument('-v', '--verb', action='store_true', required=False, help="verbose output to the terminal", dest='verbose')
 
     args = parser.parse_args()
     main(args)
