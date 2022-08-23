@@ -82,6 +82,8 @@ def query_ncbi_xml(accesion_list, current_database, api_key):
     sci_dict = {}
     to_be_removed = []
     acc_dict = dict(accesion_list)
+    if api_key is None:
+        api_key = '' 
     for item in accesion_list:
         curr_acc = item[0]
         curr_value = item[1]
@@ -114,18 +116,21 @@ def query_ncbi_xml(accesion_list, current_database, api_key):
             except IndexError:
                 pass
 
-        #print(id_list)
+        print(id_list)
         gc.collect()
         
+        print('https://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch.fcgi?db=nuccore&api_key='+api_key+'&id='+id_list+'&retmode=xml')
         try:
-            sci_req = requests.get('https://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch.fcgi?db=nuccore&query_key=&id='+id_list+'&retmode=xml').content
-        except ChunkEncodingError as ex:
+            sci_req = requests.get('https://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch.fcgi?db=nuccore&api_key='+api_key+'&id='+id_list+'&retmode=xml').content
+        except ChunkedEncodingError as ex:
             print(f"Invalid chunk encoding {str(ex)}")
+            #TODO add these requests to a list and then retry 
             exit(1)
         try:
-            tax_req = requests.get('https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esummary.fcgi?db=nuccore&query_key=&id='+id_list+'&retmode=xml').content
-        except ChunkEncodingError as ex2:
-            print(f"Invalid chunk encoding {str(ex)}")
+            tax_req = requests.get('https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esummary.fcgi?db=nuccore&api_key='+api_key+'&id='+id_list+'&retmode=xml').content
+        except ChunkedEncodingError as ex2:
+            print(f"Invalid chunk encoding {str(ex2)}")
+    
             exit(1)
         
     
@@ -318,8 +323,9 @@ def calc_average_identity_coverage_per_species (id_sci_dict):
     return(average_id_dict)
 
 def main(arg):
-    Entrez.email = os.environ.get("EMAIL_KEY")
-    Entrez.api_key = os.environ.get("SECRET_KEY")
+    Entrez.email = "YOUR_EMAIL_HERE"
+    Entrez.api_key = 'YOUR_KEY_HERE'
+    
 
     blast_name = arg.blast_output
     blast_dict, query_coverage_dict, identity_dict = collect_first_records(blast_name)
