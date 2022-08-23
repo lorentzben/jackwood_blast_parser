@@ -77,7 +77,7 @@ def initiate_database():
 
 
 
-def query_ncbi_xml(accesion_list, current_database, api_key):
+def query_ncbi_xml(accesion_list, current_database, api_key,verb):
     db = current_database
     sci_dict = {}
     to_be_removed = []
@@ -115,11 +115,12 @@ def query_ncbi_xml(accesion_list, current_database, api_key):
                 id_list = unzipped[0][0]
             except IndexError:
                 pass
-
-        print(id_list)
+        if(verb):
+            print(id_list)
         gc.collect()
         
-        print('https://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch.fcgi?db=nuccore&api_key='+api_key+'&id='+id_list+'&retmode=xml')
+        if(verb):
+            print('https://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch.fcgi?db=nuccore&api_key='+api_key+'&id='+id_list+'&retmode=xml')
         try:
             sci_req = requests.get('https://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch.fcgi?db=nuccore&api_key='+api_key+'&id='+id_list+'&retmode=xml').content
         except ChunkedEncodingError as ex:
@@ -323,8 +324,8 @@ def calc_average_identity_coverage_per_species (id_sci_dict):
     return(average_id_dict)
 
 def main(arg):
-    Entrez.email = "YOUR_EMAIL_HERE"
-    Entrez.api_key = 'YOUR_KEY_HERE'
+    Entrez.email = ""
+    Entrez.api_key = ''
     
 
     blast_name = arg.blast_output
@@ -352,13 +353,17 @@ def main(arg):
     else:
         res_name = "result_1.csv"
         
-
+    if args.verbose:
+        verbose = True
+    else:
+        verbose = False
+    
     result_table = {}
     bar = progressbar.ProgressBar(max_value=divider)
     i=0
     for item in batch_list:
         bar.update(i)
-        res_table, current_db = query_ncbi_xml(item, current_db, Entrez.api_key)
+        res_table, current_db = query_ncbi_xml(item, current_db, Entrez.api_key,verbose)
         for item in res_table.keys():
             if item in result_table:
                 result_table[item] = result_table[item] + res_table.get(item)
@@ -416,6 +421,7 @@ if __name__ == "__main__":
                         help="name of the database from previous runs", dest='database')
     parser.add_argument('-o','--dbo', action='store',required=False, help="name of the database to save to disk", dest='database_file')
     parser.add_argument('-n','--res_o', action='store',required=False, help="name of the result to save to disk", dest='result_file')
+    parser.add_argument('-v', '--verb', action='store', required=False, help="verbose output to the terminal", dest='verbose')
 
     args = parser.parse_args()
     main(args)
