@@ -1,9 +1,10 @@
-# jackwood_blasta_parser
+# Jackwood Blast Parser
 Script to Parse Blast type outputs to verify genome assemblies
 
 ## Install
 
 ```bash
+$ source ~/.bashrc 
 $ conda env create -f environment.yml
 $ conda activate jackwood_blast
 ``` 
