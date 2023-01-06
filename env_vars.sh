@@ -1,4 +1,5 @@
-#!/usr/bin/env bash
+#!/usr/bin/env python3
+import os
 
-export EMAIL_KEY='YOUR_EMAIL_HERE'
-export SECRET_KEY='YOUR_API_KEY_HERE'
+os.environ['SECRET_KEY'] = 'c33b392704f84ddc2a643e77afc159ac1708'
+os.environ['EMAIL_KEY'] = 'bjl34716@uga.edu'

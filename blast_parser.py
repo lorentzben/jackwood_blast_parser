@@ -324,40 +324,50 @@ def calc_average_identity_coverage_per_species (id_sci_dict):
     return(average_id_dict)
 
 def main(arg):
+    # variables set by env_vars.sh (depricated)
     Entrez.email = ""
     Entrez.api_key = ''
     
-
+    # input file from params
     blast_name = arg.blast_output
+    # Selects first record from each blast result as well as percent query and identity 
     blast_dict, query_coverage_dict, identity_dict = collect_first_records(blast_name)
 
+    # diagnostic print statments
     #print(query_coverage_dict)
     #print(identity_dict)
 
+    # determines batch size so as not to overload querying 
     batch_size , divider = calc_batch_size(blast_dict)
 
+    # divides query list into batches
     batch_list = create_batches(blast_dict, batch_size, divider)
     
+    # checks for existing database if none present creates new empty
     if arg.database:
         current_db = pd.read_csv(arg.database)
     else:
         current_db = initiate_database()
     
+    # if no database name provided, database_1.csv used 
     if arg.database_file:
         db_name = arg.database_file
     else:
         db_name = "database_1.csv"
 
+    # if not result name file provided result_1.csv used
     if arg.result_file:
         res_name = arg.result_file
     else:
         res_name = "result_1.csv"
-        
+
+    # prints info to terminal if selected  
     if args.verbose:
         verbose = True
     else:
         verbose = False
     
+    # iterates through batch list and queries ncbi for records, checks if record currently exists and adds or updates 
     result_table = {}
     bar = progressbar.ProgressBar(max_value=divider)
     i=0
@@ -371,6 +381,7 @@ def main(arg):
                 result_table[item] = res_table.get(item)
         #print(result_table) 
         #print(current_db)
+        # frees some memory 
         gc.collect()
         i = i+1
         
@@ -378,11 +389,15 @@ def main(arg):
     #print(current_db)
     #print(sum(result_table.values()))
 
+    # save database to disk
     write_db_to_file(current_db,db_name)
+    # save query results to disk
     res_df = write_res_tab_to_file(result_table,res_name)
 
+    # calculates geometric mean of average query coverage for each record
     sci_query_coverage_dict, missing_qc_acc = convert_acc_query_coverage_dict_to_sci_qc_dict(current_db, query_coverage_dict)
-    
+
+    # calculates geometric mean of average identity coverage for each record
     sci_id_coverage_dict, missing_id_acc = convert_acc_identify_dict_to_sci_ident_dict(current_db, identity_dict)
 
     
@@ -390,27 +405,32 @@ def main(arg):
     #    for key in sci_query_coverage_dict.keys():
     #        f.write("%s, %s\n" % (key, sci_query_coverage_dict[key]))
 
+    # calculates geometric mean of average query coverage for each species
     query_coverage_dict = calc_average_query_coverage_per_species(sci_query_coverage_dict)
+
+    # calculates geometric mean of average identity coverage for each species
     identity_dict = calc_average_identity_coverage_per_species(sci_id_coverage_dict)
     
-    
+    # joins average query coverage and average identity coverage into a two column table
     qc_id_table = pd.concat([pd.DataFrame(query_coverage_dict, index=[0]).T,pd.DataFrame(identity_dict, index=[0]).T], axis=1)
     qc_id_table.columns = ['ave_query_coverage','ave_identitiy']
 
+    # renames columns and sets index to taxa as opposed to numeric
     res_df.columns = ['taxa','count']
     res_df.set_index('taxa', inplace=True)
     qc_id_table.index.name = 'taxa'
 
+    # joins species and coverage tables 
     joined_table = res_df.join(qc_id_table, how='outer')
 
+    # saves joined table to disk
     joined_table.to_csv(res_name[:-4]+"_more_info.csv",index=True)
 
    
     # print(batch_list)
 
     
-
-
+# parse parameters from user submission
 if __name__ == "__main__":
     # Build Argument Parser in order to facilitate ease of use for user
     parser = argparse.ArgumentParser(
