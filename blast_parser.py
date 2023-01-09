@@ -20,29 +20,36 @@ import csv
 
 
 def collect_first_records(blast_frame):
+    # Loads the blast result file to memory
     blast_file = open(blast_frame, 'r')
     Lines = blast_file.readlines()
 
+    # instantiates dicts for accessions, and coverage stats
     hash_start = False
     acc_dict = {}
     per_q_dict = {}
     per_i_dict = {}
     count=0
+    # iterates over each line and uses the hash from comments to determine which record is first
     for line in Lines:
         if line[0] == "#":
             hash_start = True
         if hash_start == True and line[0] != "#":
+            # since this is a csv like document we can select indecies as values
             acc = str.split(line, ",")[1]
             perc_query = str.split(line,",")[5]
             perc_ident = str.split(line,",")[6]
+            # checks if value exists in the accession dict and adds it if not 
             if acc not in acc_dict.keys():
                 acc_dict[acc] = 1
                 hash_start= False
                 count= count+1
+            # checks if value exists in the accession dict and increases count 
             if acc in acc_dict.keys():
                 acc_dict[acc] = acc_dict[acc] + 1
                 hash_start = False
                 count = count+1
+            # performs same check as accessions but creates a list of coverages
             if acc not in per_q_dict.keys():
                 per_q_dict[acc] = list([float(perc_query)])
                 hash_start = False
@@ -64,6 +71,7 @@ def collect_first_records(blast_frame):
         #    continue
 
     gc.collect()
+    # sorts accession dict so that the most popular accessions are at top to speed up quering.
     print("record count: "+str(count))
     acc_dict_sorted = sorted(
         acc_dict.items(), key=lambda x: x[1], reverse=True)
@@ -71,6 +79,7 @@ def collect_first_records(blast_frame):
 
 
 def initiate_database():
+    # intiates an empty dataframe with headers 
     column_names = ['Accession', 'TaxID', 'Scientific']
     database = pd.DataFrame(columns=column_names)
     return database
@@ -82,8 +91,10 @@ def query_ncbi_xml(accesion_list, current_database, api_key,verb):
     sci_dict = {}
     to_be_removed = []
     acc_dict = dict(accesion_list)
+    # checks if an api key was provided and gives a dummy value if not included
     if api_key is None:
         api_key = '' 
+    # iterates over each accession and count and separates them out
     for item in accesion_list:
         curr_acc = item[0]
         curr_value = item[1]
@@ -91,23 +102,33 @@ def query_ncbi_xml(accesion_list, current_database, api_key,verb):
         #print(curr_acc in current_database["Accession"].values)
         if curr_acc in current_database["Accession"].values:
             #print(curr_acc +" found in db")
+            # selects current scientific name from the database if it exists
             curr_name = str(current_database[current_database["Accession"].values == curr_acc]["Scientific"].values)
+            # add the accession number to a list to be removed from the batch list
             to_be_removed.append(curr_acc)
+            # check if the current scientific name is in the dictionary and add or update value
             if curr_name not in sci_dict:
                 sci_dict[curr_name] = curr_value
             else:
                 sci_dict[curr_name] = sci_dict[curr_name] + curr_value
-    
+    # remove the accession from the accession list to be queried if its not in the database. 
     for item in to_be_removed:
         del acc_dict[item] 
 
+    # get a list of the accessions to be queried
     accesion_list = list(acc_dict.items())
     #print(accesion_list)
+    # separetes list of accessions and list of counts into a nested list 
     unzipped = [[i for i, j in accesion_list],
                 [j for i, j in accesion_list]]
     #print(unzipped)
+    # as long as there is something in both lists do this 
     if unzipped != [[],[]]:
         
+        # this is in place in case there is only one accession ID passed through 
+        # first case joins all accessions with commas in between
+        # second takes one acession (odd number)
+        # final is if there are no more accessions to let the program continue gracefully (even number)
         try:
             id_list = unzipped[0][0] +','+ ','.join(unzipped[0][1:])
         except IndexError:
@@ -118,7 +139,7 @@ def query_ncbi_xml(accesion_list, current_database, api_key,verb):
         if(verb):
             print(id_list)
         gc.collect()
-        
+        # query for scientific names from list of accessions
         if(verb):
             print('https://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch.fcgi?db=nuccore&api_key='+api_key+'&id='+id_list+'&retmode=xml')
         try:
@@ -127,6 +148,7 @@ def query_ncbi_xml(accesion_list, current_database, api_key,verb):
             print(f"Invalid chunk encoding {str(ex)}")
             #TODO add these requests to a list and then retry 
             exit(1)
+        # query for taxID from list of accessions 
         try:
             tax_req = requests.get('https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esummary.fcgi?db=nuccore&api_key='+api_key+'&id='+id_list+'&retmode=xml').content
         except ChunkedEncodingError as ex2:
@@ -138,8 +160,11 @@ def query_ncbi_xml(accesion_list, current_database, api_key,verb):
 
         count = 0
         sci_names = []
+        # Beautiful Soup is a parser to make sense of the XML 
+        # this selects for all of the organism names from NCBI so we can link them to accession IDs
         soup_sci = BeautifulSoup(sci_req,'lxml')
         sci_res = soup_sci.findAll("gbseq_organism")
+        # connects counts of accession to scientific name and adds it to result list or updates the value
         for item in sci_res:
             curr_name = item.text
             sci_names.append(curr_name)
@@ -154,6 +179,7 @@ def query_ncbi_xml(accesion_list, current_database, api_key,verb):
         tax_res = soup_tax.findAll("item")
         i = 0
         j = 0
+        # links tax id to accession number 
         for item in tax_res:
             if tax_res[i]['name'] == "TaxId":
                 #print("i, j: " +str(i)+" "+str(j))
@@ -171,22 +197,28 @@ def query_ncbi_xml(accesion_list, current_database, api_key,verb):
     
 
 def query_ncbi(accesion_list, current_database):
+    # Not actually implemented, was a intermediary development method
     sci_dict = {}
     count = 0
 
+    # splits the accession number and count
     unzipped = [[i for i, j in accesion_list],
                 [j for i, j in accesion_list]]
 
+    # saves accession and count to disk (can be turned off)
     pd.DataFrame(unzipped[0]).to_csv("accession.csv",index=False)
-    pd.DataFrame(unzipped[1]).to_csv("coint.csv",index=False)
+    pd.DataFrame(unzipped[1]).to_csv("count.csv",index=False)
     #print(unzipped[0][0] +' ,'+ ' ,'.join(unzipped[0][1:]))
 
+    # this reads the query into memory similar to how you open a file in python for scientific names
     tax_handle = Entrez.efetch(db="Nucleotide", id=unzipped[0][0] +' ,'+ ' ,'.join(unzipped[0][1:]), retmode="xml")
     record = Entrez.read(tax_handle)
 
+    # this reads the query into memory similar to how you open a file in python for tax ids
     tax_id_handle = Entrez.esummary(db="Nucleotide", id=unzipped[0][0] +' ,'+ ' ,'.join(unzipped[0][1:]), retmode="xml")
     tax_records = Entrez.read(tax_id_handle)
 
+    # goes through accession resutlts and constructs a result tabl 
     for i in range(0,len(record)): 
         tax_name = record[i]['GBSeq_source']
         tax_id = int(tax_records[i]["TaxId"])
@@ -202,6 +234,7 @@ def query_ncbi(accesion_list, current_database):
 
 def create_batches(accesion_list, batch_size, divider):
     batch_list = []
+    # subsets long list by the provided divider and returns a list
     for i in range(0, divider):
         first_index = i*batch_size
         second_index = first_index + batch_size
@@ -211,15 +244,18 @@ def create_batches(accesion_list, batch_size, divider):
 
 
 def calc_batch_size(accesion_list):
+    # determines how many batches can be constructed based on divider
     print("accession_count: "+str(len(accesion_list)))
     divider = 200
     size = round(len(accesion_list)/divider)
     return size, divider
 
 def write_db_to_file(current_database,db_name):
+    # wrapper function to save database to csv file
     current_database.to_csv(db_name,index=False)
 
 def write_res_tab_to_file(res_table,res_name):
+    # turns a dict into a dataframe to save as a csv file
     names = list(res_table.keys())
     values = list(res_table.values())
     name_list = []
@@ -248,6 +284,8 @@ def convert_acc_query_coverage_dict_to_sci_qc_dict(database, query_acc_dict):
     #qafile = open('query_acc_dict.bjl', 'ab')
     #pickle.dump(query_acc_dict,qafile)
     #qafile.close()
+
+    # iterates through the database and checks for accessions, either adds or updates query coverage values
 
     for item in database.iterrows():
         sci_name = item[1][2]
@@ -283,6 +321,8 @@ def convert_acc_identify_dict_to_sci_ident_dict(database, ident_acc_dict):
     #pickle.dump(query_acc_dict,idfile)
     #idfile.close()
 
+    # iterates through the database and checks for accessions, either adds or updates identity coverage values
+
     for item in database.iterrows():
         sci_name = item[1][2]
         acc = item[1][0]
@@ -309,6 +349,7 @@ def convert_acc_identify_dict_to_sci_ident_dict(database, ident_acc_dict):
 
 
 def calc_average_query_coverage_per_species (query_sci_dict):
+    # iterates over each specie name and calculates the geometric mean for query coverage
     average_q_dict = {}
     for item in query_sci_dict.keys():
         query_list = query_sci_dict[item]
@@ -317,6 +358,7 @@ def calc_average_query_coverage_per_species (query_sci_dict):
         
 
 def calc_average_identity_coverage_per_species (id_sci_dict):
+    # iterates over each specie name and calculates the geometric mean for identity coverage
     average_id_dict = {}
     for item in id_sci_dict.keys():
         id_list = id_sci_dict[item]
