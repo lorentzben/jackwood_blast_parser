@@ -35,7 +35,7 @@ def collect_first_records(blast_frame):
         if line[0] == "#":
             hash_start = True
         if hash_start == True and line[0] != "#":
-            # since this is a csv like document we can select indecies as values
+            # since this is a csv like document we can select indicies as values
             acc = str.split(line, ",")[1]
             perc_query = str.split(line,",")[5]
             perc_ident = str.split(line,",")[6]
@@ -366,7 +366,7 @@ def calc_average_identity_coverage_per_species (id_sci_dict):
     return(average_id_dict)
 
 def main(arg):
-    # variables set by env_vars.sh (depricated)
+    # TODO variables set by env_vars.sh (depricated)
     Entrez.email = ""
     Entrez.api_key = ''
     
