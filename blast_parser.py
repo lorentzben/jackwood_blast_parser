@@ -92,8 +92,10 @@ def query_ncbi_xml(accesion_list, current_database, api_key,verb):
     to_be_removed = []
     acc_dict = dict(accesion_list)
     # checks if an api key was provided and gives a dummy value if not included
-    if api_key is None:
-        api_key = '' 
+    if (api_key is None) or (api_key == ""):
+        api_key = ""
+    else:
+        api_key = "&api_key="+api_key
     # iterates over each accession and count and separates them out
     for item in accesion_list:
         curr_acc = item[0]
@@ -141,16 +143,16 @@ def query_ncbi_xml(accesion_list, current_database, api_key,verb):
         gc.collect()
         # query for scientific names from list of accessions
         if(verb):
-            print('https://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch.fcgi?db=nuccore&api_key='+api_key+'&id='+id_list+'&retmode=xml')
+            print('https://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch.fcgi?db=nuccore'+api_key+'&id='+id_list+'&retmode=xml')
         try:
-            sci_req = requests.get('https://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch.fcgi?db=nuccore&api_key='+api_key+'&id='+id_list+'&retmode=xml').content
+            sci_req = requests.get('https://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch.fcgi?db=nuccore'+api_key+'&id='+id_list+'&retmode=xml').content
         except ChunkedEncodingError as ex:
             print(f"Invalid chunk encoding {str(ex)}")
             #TODO add these requests to a list and then retry 
             exit(1)
         # query for taxID from list of accessions 
         try:
-            tax_req = requests.get('https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esummary.fcgi?db=nuccore&api_key='+api_key+'&id='+id_list+'&retmode=xml').content
+            tax_req = requests.get('https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esummary.fcgi?db=nuccore'+api_key+'&id='+id_list+'&retmode=xml').content
         except ChunkedEncodingError as ex2:
             print(f"Invalid chunk encoding {str(ex2)}")
     
@@ -197,7 +199,7 @@ def query_ncbi_xml(accesion_list, current_database, api_key,verb):
     
 
 def query_ncbi(accesion_list, current_database):
-    # Not actually implemented, was a intermediary development method
+    # TODO Not actually implemented, was a intermediary development method
     sci_dict = {}
     count = 0
 
@@ -367,8 +369,13 @@ def calc_average_identity_coverage_per_species (id_sci_dict):
 
 def main(arg):
     # TODO variables set by env_vars.sh (depricated)
-    Entrez.email = ""
-    Entrez.api_key = ''
+
+    os.environ['SECRET_KEY'] = ''
+    os.environ['EMAIL_KEY'] = ''
+
+    Entrez.email = os.environ['EMAIL_KEY']
+    Entrez.api_key = os.environ['SECRET_KEY']
+   
     
     # input file from params
     blast_name = arg.blast_output
