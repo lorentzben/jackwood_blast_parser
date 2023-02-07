@@ -368,10 +368,9 @@ def calc_average_identity_coverage_per_species (id_sci_dict):
     return(average_id_dict)
 
 def main(arg):
-    # TODO variables set by env_vars.sh (depricated)
-
-    os.environ['SECRET_KEY'] = ''
-    os.environ['EMAIL_KEY'] = ''
+    #If user has an NCBI api key, place here for less restricted queurying
+    os.environ['SECRET_KEY'] = ""
+    os.environ['EMAIL_KEY'] = ""
 
     Entrez.email = os.environ['EMAIL_KEY']
     Entrez.api_key = os.environ['SECRET_KEY']
