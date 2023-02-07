@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 
 import Bio
+from lxml import objectify as xml_objectify
 from Bio import Entrez
 import time
 import os
@@ -18,6 +19,27 @@ import gc
 import pickle
 import csv
 
+
+def xml_to_dict(xml_str):
+    """ Convert xml to dict, using lxml v3.4.2 xml processing library from user radtek on Stack Overflow """
+    def xml_to_dict_recursion(xml_object):
+        dict_object = xml_object.__dict__
+        if not dict_object:
+            return xml_object
+        for key, value in dict_object.items():
+            dict_object[key] = xml_to_dict_recursion(value)
+        return dict_object
+    return xml_to_dict_recursion(xml_objectify.fromstring(xml_str))
+
+def list_of_dict_to_dict(xml_dict_list):
+   res_dict = {}
+   for dict in xml_dict_list:
+      try:
+         new = {list(dict.values())[0]:list(dict.values())[1]}
+         res_dict.update(new)
+      except IndexError:
+         pass
+   return res_dict
 
 def collect_first_records(blast_frame):
     # Loads the blast result file to memory
