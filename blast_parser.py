@@ -31,15 +31,43 @@ def xml_to_dict(xml_str):
         return dict_object
     return xml_to_dict_recursion(xml_objectify.fromstring(xml_str))
 
+#list_of_dict_to_dict(xml_dict)
+
 def list_of_dict_to_dict(xml_dict_list):
-   res_dict = {}
-   for dict in xml_dict_list:
-      try:
-         new = {list(dict.values())[0]:list(dict.values())[1]}
-         res_dict.update(new)
-      except IndexError:
-         pass
-   return res_dict
+    res_dict = {}
+    for dict in xml_dict_list:
+        print(dict.values())
+        try:
+            curr_key = str(list(dict.values())[0])
+            curr_val = str(list(dict.values())[1])
+        except IndexError:
+            curr_key = ""
+            curr_val = ""
+            pass
+        if (curr_key not in res_dict) and (curr_key not in ['translation','codon_start','codon_end','transl_table','product','protein_id']) :
+            print("added: ", curr_key, ",", curr_val)
+            res_dict[curr_key] = [curr_val]
+            print(res_dict)
+        elif (curr_key not in ['translation','codon_start','codon_end','transl_table','product','protein_id']):
+            print("updated: ", curr_key, ":",res_dict[curr_key])
+            res_dict[curr_key].append(curr_val)
+        #print(res_dict)
+    return res_dict
+
+def retrieve_strain_from_list_of_dict(xml_dict_list):
+    # Takes in a list of dicts from gbqualifier
+    strain_list = []
+    for dict in xml_dict_list:
+        try:
+            curr_key = str(list(dict.values())[0])
+            curr_val = str(list(dict.values())[1])
+        except IndexError:
+            curr_key = ""
+            curr_val = ""
+            pass
+        if (curr_key in ["strain","isolate"]) :
+            strain_list.append(curr_val)
+    return strain_list
 
 def collect_first_records(blast_frame):
     # Loads the blast result file to memory
@@ -101,8 +129,8 @@ def collect_first_records(blast_frame):
 
 
 def initiate_database():
-    # intiates an empty dataframe with headers 
-    column_names = ['Accession', 'TaxID', 'Scientific']
+    # intiates an empty dataframe with headers
+    column_names = ['Accession', 'TaxID', 'Scientific','Strain']
     database = pd.DataFrame(columns=column_names)
     return database
 
@@ -111,6 +139,7 @@ def initiate_database():
 def query_ncbi_xml(accesion_list, current_database, api_key,verb):
     db = current_database
     sci_dict = {}
+    strain_dict = {}
     to_be_removed = []
     acc_dict = dict(accesion_list)
     # checks if an api key was provided and gives a dummy value if not included
@@ -128,6 +157,7 @@ def query_ncbi_xml(accesion_list, current_database, api_key,verb):
             #print(curr_acc +" found in db")
             # selects current scientific name from the database if it exists
             curr_name = str(current_database[current_database["Accession"].values == curr_acc]["Scientific"].values)
+            curr_strain = str(current_database[current_database["Accession"].values == curr_acc]["Strain"].values)
             # add the accession number to a list to be removed from the batch list
             to_be_removed.append(curr_acc)
             # check if the current scientific name is in the dictionary and add or update value
@@ -135,6 +165,14 @@ def query_ncbi_xml(accesion_list, current_database, api_key,verb):
                 sci_dict[curr_name] = curr_value
             else:
                 sci_dict[curr_name] = sci_dict[curr_name] + curr_value
+
+            if str(curr_strain) not in ['["Unkown"]',"['Unkown']"]:
+                if curr_strain not in strain_dict:
+                    strain_dict[curr_strain] = curr_value
+                else:
+                    strain_dict[curr_strain] = sci_dict[curr_strain] + curr_value
+           
+
     # remove the accession from the accession list to be queried if its not in the database. 
     for item in to_be_removed:
         del acc_dict[item] 
@@ -142,7 +180,7 @@ def query_ncbi_xml(accesion_list, current_database, api_key,verb):
     # get a list of the accessions to be queried
     accesion_list = list(acc_dict.items())
     #print(accesion_list)
-    # separetes list of accessions and list of counts into a nested list 
+    # separates list of accessions and list of counts into a nested list 
     unzipped = [[i for i, j in accesion_list],
                 [j for i, j in accesion_list]]
     #print(unzipped)
@@ -181,43 +219,83 @@ def query_ncbi_xml(accesion_list, current_database, api_key,verb):
             exit(1)
         
     
-
         count = 0
         sci_names = []
+
+        soup_sci = BeautifulSoup(sci_req,'lxml')
+
+        # Strain isolate information gathering
+        qualifiers = soup_sci.findAll("gbqualifier")
+
+        # turns gbqualifier names and values into a dict
+        xml_dict = [xml_to_dict(str(elem)) for elem in qualifiers]
+
+        # flattens a list of dicts where the keys are all the same in both dicts
+        strainlist = retrieve_strain_from_list_of_dict(xml_dict)
+        
+
+        #strainlist index is in the same order as accessions
+                
         # Beautiful Soup is a parser to make sense of the XML 
         # this selects for all of the organism names from NCBI so we can link them to accession IDs
-        soup_sci = BeautifulSoup(sci_req,'lxml')
+        
         sci_res = soup_sci.findAll("gbseq_organism")
         # connects counts of accession to scientific name and adds it to result list or updates the value
+        p = 0 
         for item in sci_res:
+            #print("sci res: " +str(list(sci_res)))
+            #print("strain list: " + str(list(strainlist)))
             curr_name = item.text
             sci_names.append(curr_name)
+            try:
+                curr_strain = strainlist[p]
+            except IndexError:
+                curr_strain = "Unknown"
             if curr_name not in sci_dict:
                 sci_dict[curr_name] = unzipped[1][count]
             else:
                 sci_dict[curr_name] = sci_dict[curr_name] + unzipped[1][count]
+            
+            if curr_strain not in strain_dict:
+                strain_dict[curr_strain] = unzipped[1][count]
+            else:
+                strain_dict[curr_strain] = strain_dict[curr_strain] + unzipped[1][count] 
             count = count + 1
+            p = p+1
         gc.collect()
+
+        
             
         soup_tax = BeautifulSoup(tax_req, 'lxml')
         tax_res = soup_tax.findAll("item")
         i = 0
         j = 0
+        
         # links tax id to accession number 
         for item in tax_res:
             if tax_res[i]['name'] == "TaxId":
-                #print("i, j: " +str(i)+" "+str(j))
+                print("i, j: " +str(i)+" "+str(j))
                 curr_id = tax_res[i].text
+                try:
+                    curr_strain = strainlist[j]
+                except IndexError:
+                    curr_strain = "Unkown"
                 #print("current_id: "+curr_id)
+                print("length scinames", len(sci_names))
+                print("length strain", len(strainlist))
                 new_row = pd.DataFrame({'Accession':[unzipped[0][j]], 
                 'TaxID':[str(curr_id)], 
-                'Scientific':[sci_names[j]]})
-                #print(new_row)
+                'Scientific':[sci_names[j]],
+                'Strain':[curr_strain]})
                 db = db.append(new_row, ignore_index=True)
                 j = j+1
             i = i+1
         gc.collect()
-    return(sci_dict, db)
+        #print(sci_dict)
+        #print(db)
+        
+        #print(strain_dict)
+    return(sci_dict, db, strain_dict)
     
 
 def query_ncbi(accesion_list, current_database):
@@ -430,6 +508,7 @@ def main(arg):
         res_name = arg.result_file
     else:
         res_name = "result_1.csv"
+    
 
     # prints info to terminal if selected  
     if args.verbose:
@@ -439,16 +518,24 @@ def main(arg):
     
     # iterates through batch list and queries ncbi for records, checks if record currently exists and adds or updates 
     result_table = {}
+    strain_table = {}
     bar = progressbar.ProgressBar(max_value=divider)
     i=0
     for item in batch_list:
         bar.update(i)
-        res_table, current_db = query_ncbi_xml(item, current_db, Entrez.api_key,verbose)
+        res_table, current_db, strain_dict = query_ncbi_xml(item, current_db, Entrez.api_key,verbose)
+        #TODO implement this method with strain table or add to result table
         for item in res_table.keys():
             if item in result_table:
                 result_table[item] = result_table[item] + res_table.get(item)
             else:
                 result_table[item] = res_table.get(item)
+
+        for item in strain_dict.keys():
+            if item in strain_table:
+                strain_table[item] = strain_table[item] + strain_table.get(item)
+            else:
+                strain_table[item] = strain_dict.get(item)
         #print(result_table) 
         #print(current_db)
         # frees some memory 
@@ -463,6 +550,9 @@ def main(arg):
     write_db_to_file(current_db,db_name)
     # save query results to disk
     res_df = write_res_tab_to_file(result_table,res_name)
+
+    #TODO update with more params
+    strain_df = write_res_tab_to_file(strain_table,"strain_table.csv")
 
     # calculates geometric mean of average query coverage for each record
     sci_query_coverage_dict, missing_qc_acc = convert_acc_query_coverage_dict_to_sci_qc_dict(current_db, query_coverage_dict)
