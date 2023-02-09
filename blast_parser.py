@@ -36,7 +36,7 @@ def xml_to_dict(xml_str):
 def list_of_dict_to_dict(xml_dict_list):
     res_dict = {}
     for dict in xml_dict_list:
-        print(dict.values())
+        #print(dict.values())
         try:
             curr_key = str(list(dict.values())[0])
             curr_val = str(list(dict.values())[1])
@@ -45,11 +45,11 @@ def list_of_dict_to_dict(xml_dict_list):
             curr_val = ""
             pass
         if (curr_key not in res_dict) and (curr_key not in ['translation','codon_start','codon_end','transl_table','product','protein_id']) :
-            print("added: ", curr_key, ",", curr_val)
+            #print("added: ", curr_key, ",", curr_val)
             res_dict[curr_key] = [curr_val]
-            print(res_dict)
+            #print(res_dict)
         elif (curr_key not in ['translation','codon_start','codon_end','transl_table','product','protein_id']):
-            print("updated: ", curr_key, ":",res_dict[curr_key])
+            #print("updated: ", curr_key, ":",res_dict[curr_key])
             res_dict[curr_key].append(curr_val)
         #print(res_dict)
     return res_dict
@@ -68,6 +68,22 @@ def retrieve_strain_from_list_of_dict(xml_dict_list):
         if (curr_key in ["strain","isolate"]) :
             strain_list.append(curr_val)
     return strain_list
+
+def update_strain_tuples(strain, count, strain_count_list):
+    updated_list_of_tuples = []
+    
+    for item in strain_count_list:
+      
+      #print('list of tuples start:', updated_list_of_tuples)
+      curr_strain = item[0]
+      if strain == curr_strain:
+        item[1] = item[1] + count
+        updated_list_of_tuples.append(item)
+        #print('list of tuples inc:', updated_list_of_tuples)
+      else:
+        updated_list_of_tuples.append(item)
+        #print("list of tuples start", updated_list_of_tuples)
+    return updated_list_of_tuples
 
 def collect_first_records(blast_frame):
     # Loads the blast result file to memory
@@ -156,22 +172,25 @@ def query_ncbi_xml(accesion_list, current_database, api_key,verb):
         if curr_acc in current_database["Accession"].values:
             #print(curr_acc +" found in db")
             # selects current scientific name from the database if it exists
-            curr_name = str(current_database[current_database["Accession"].values == curr_acc]["Scientific"].values)
-            curr_strain = str(current_database[current_database["Accession"].values == curr_acc]["Strain"].values)
+            curr_name = " ".join(str(x) for x in list(current_database[current_database["Accession"].values == curr_acc]["Scientific"].values))
+            curr_strain = " ".join(str(y) for y in list(current_database[current_database["Accession"].values == curr_acc]["Strain"].values))
+            #print("curr_name: ", curr_name)
+            #print("curr_strain: ", curr_strain)
             # add the accession number to a list to be removed from the batch list
             to_be_removed.append(curr_acc)
             # check if the current scientific name is in the dictionary and add or update value
+            # TODO nest the strain check inside of the name check and start the Tuple list here 
             if curr_name not in sci_dict:
-                sci_dict[curr_name] = curr_value
+                sci_dict[curr_name] = [(curr_strain,curr_value)]
             else:
-                sci_dict[curr_name] = sci_dict[curr_name] + curr_value
-
+                sci_dict[curr_name] = update_strain_tuples(curr_strain,curr_value, sci_dict.get(curr_name))
+            
             if str(curr_strain) not in ['["Unkown"]',"['Unkown']"]:
                 if curr_strain not in strain_dict:
                     strain_dict[curr_strain] = curr_value
                 else:
-                    strain_dict[curr_strain] = sci_dict[curr_strain] + curr_value
-           
+                    strain_dict[curr_strain] = strain_dict[curr_strain] + curr_value
+    print("sci dict:", sci_dict)       
 
     # remove the accession from the accession list to be queried if its not in the database. 
     for item in to_be_removed:
@@ -241,6 +260,7 @@ def query_ncbi_xml(accesion_list, current_database, api_key,verb):
         
         sci_res = soup_sci.findAll("gbseq_organism")
         # connects counts of accession to scientific name and adds it to result list or updates the value
+        # TODO nest the strain check here like 164 to add or updated tuple values
         p = 0 
         for item in sci_res:
             #print("sci res: " +str(list(sci_res)))
@@ -274,15 +294,15 @@ def query_ncbi_xml(accesion_list, current_database, api_key,verb):
         # links tax id to accession number 
         for item in tax_res:
             if tax_res[i]['name'] == "TaxId":
-                print("i, j: " +str(i)+" "+str(j))
+                #print("i, j: " +str(i)+" "+str(j))
                 curr_id = tax_res[i].text
                 try:
                     curr_strain = strainlist[j]
                 except IndexError:
                     curr_strain = "Unkown"
                 #print("current_id: "+curr_id)
-                print("length scinames", len(sci_names))
-                print("length strain", len(strainlist))
+                #print("length scinames", len(sci_names))
+                #print("length strain", len(strainlist))
                 new_row = pd.DataFrame({'Accession':[unzipped[0][j]], 
                 'TaxID':[str(curr_id)], 
                 'Scientific':[sci_names[j]],
@@ -361,6 +381,7 @@ def write_res_tab_to_file(res_table,res_name):
     names = list(res_table.keys())
     values = list(res_table.values())
     name_list = []
+    # TODO remove this block if no longer needed see line 527
     for item in names:
         fix_name = item.strip('][').split(', ')[0].replace("'",'')
         name_list.append(fix_name)
@@ -524,12 +545,16 @@ def main(arg):
     for item in batch_list:
         bar.update(i)
         res_table, current_db, strain_dict = query_ncbi_xml(item, current_db, Entrez.api_key,verbose)
-        #TODO implement this method with strain table or add to result table
-        for item in res_table.keys():
+        #TODO see if this makes sense after getting to the lower logic
+        for item in list(res_table.keys()):
+            #print(item)
             if item in result_table:
+                #print(res_table.get(item))
                 result_table[item] = result_table[item] + res_table.get(item)
+                #result_table[item].append(res_table.get(item))
             else:
                 result_table[item] = res_table.get(item)
+                #result_table[item] = [res_table.get(item)]
 
         for item in strain_dict.keys():
             if item in strain_table:
