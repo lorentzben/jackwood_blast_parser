@@ -539,8 +539,8 @@ def main(arg):
         res_table, current_db, strain_dict = query_ncbi_xml(item, current_db, Entrez.api_key, verbose)
         #TODO see if this makes sense after getting to the lower logic
         for item in list(res_table.keys()):
-            print("res_table_key :",item)
-            print("res_table_value: ",list(res_table.values()) )
+            #print("res_table_key :",item)
+            #print("res_table_value: ",list(res_table.values()) )
             if item in result_table:
                 result_table[item] = result_table[item] + res_table.get(item)
             else:
