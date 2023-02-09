@@ -31,28 +31,6 @@ def xml_to_dict(xml_str):
         return dict_object
     return xml_to_dict_recursion(xml_objectify.fromstring(xml_str))
 
-#list_of_dict_to_dict(xml_dict)
-
-def list_of_dict_to_dict(xml_dict_list):
-    res_dict = {}
-    for dict in xml_dict_list:
-        #print(dict.values())
-        try:
-            curr_key = str(list(dict.values())[0])
-            curr_val = str(list(dict.values())[1])
-        except IndexError:
-            curr_key = ""
-            curr_val = ""
-            pass
-        if (curr_key not in res_dict) and (curr_key not in ['translation','codon_start','codon_end','transl_table','product','protein_id']) :
-            #print("added: ", curr_key, ",", curr_val)
-            res_dict[curr_key] = [curr_val]
-            #print(res_dict)
-        elif (curr_key not in ['translation','codon_start','codon_end','transl_table','product','protein_id']):
-            #print("updated: ", curr_key, ":",res_dict[curr_key])
-            res_dict[curr_key].append(curr_val)
-        #print(res_dict)
-    return res_dict
 
 def retrieve_strain_from_list_of_dict(xml_dict_list):
     # Takes in a list of dicts from gbqualifier
@@ -71,19 +49,20 @@ def retrieve_strain_from_list_of_dict(xml_dict_list):
 
 def update_strain_tuples(strain, count, strain_count_list):
     updated_list_of_tuples = []
+
+    unzipped = [[i for i, j in strain_count_list],
+                [j for i, j in strain_count_list]]
+
+    if strain in unzipped[0]:
+        loc = unzipped[0].index(strain)
+        unzipped[1][loc] = unzipped[1][loc] + count
+    else:
+        unzipped[0].append(strain)
+        unzipped[1].append(count)
     
-    for item in strain_count_list:
-      
-      #print('list of tuples start:', updated_list_of_tuples)
-      curr_strain = item[0]
-      if strain == curr_strain:
-        item[1] = item[1] + count
-        updated_list_of_tuples.append(item)
-        #print('list of tuples inc:', updated_list_of_tuples)
-      else:
-        updated_list_of_tuples.append(item)
-        #print("list of tuples start", updated_list_of_tuples)
-    return updated_list_of_tuples
+    updated_list = list(zip(unzipped[0],unzipped[1]))
+    return updated_list
+
 
 def collect_first_records(blast_frame):
     # Loads the blast result file to memory
@@ -170,27 +149,28 @@ def query_ncbi_xml(accesion_list, current_database, api_key,verb):
         
         #print(curr_acc in current_database["Accession"].values)
         if curr_acc in current_database["Accession"].values:
-            #print(curr_acc +" found in db")
+            
             # selects current scientific name from the database if it exists
             curr_name = " ".join(str(x) for x in list(current_database[current_database["Accession"].values == curr_acc]["Scientific"].values))
             curr_strain = " ".join(str(y) for y in list(current_database[current_database["Accession"].values == curr_acc]["Strain"].values))
-            #print("curr_name: ", curr_name)
-            #print("curr_strain: ", curr_strain)
+            
             # add the accession number to a list to be removed from the batch list
             to_be_removed.append(curr_acc)
             # check if the current scientific name is in the dictionary and add or update value
-            # TODO nest the strain check inside of the name check and start the Tuple list here 
             if curr_name not in sci_dict:
+                
                 sci_dict[curr_name] = [(curr_strain,curr_value)]
             else:
+                
+                updated_res = update_strain_tuples(curr_strain,curr_value, sci_dict.get(curr_name))
+                
                 sci_dict[curr_name] = update_strain_tuples(curr_strain,curr_value, sci_dict.get(curr_name))
             
             if str(curr_strain) not in ['["Unkown"]',"['Unkown']"]:
                 if curr_strain not in strain_dict:
                     strain_dict[curr_strain] = curr_value
                 else:
-                    strain_dict[curr_strain] = strain_dict[curr_strain] + curr_value
-    print("sci dict:", sci_dict)       
+                    strain_dict[curr_strain] = strain_dict[curr_strain] + curr_value  
 
     # remove the accession from the accession list to be queried if its not in the database. 
     for item in to_be_removed:
@@ -271,10 +251,11 @@ def query_ncbi_xml(accesion_list, current_database, api_key,verb):
                 curr_strain = strainlist[p]
             except IndexError:
                 curr_strain = "Unknown"
+
             if curr_name not in sci_dict:
-                sci_dict[curr_name] = unzipped[1][count]
+                sci_dict[curr_name] = [(curr_strain, unzipped[1][count])] 
             else:
-                sci_dict[curr_name] = sci_dict[curr_name] + unzipped[1][count]
+                sci_dict[curr_name] = update_strain_tuples(curr_strain,unzipped[1][count], sci_dict.get(curr_name)) 
             
             if curr_strain not in strain_dict:
                 strain_dict[curr_strain] = unzipped[1][count]
@@ -380,13 +361,24 @@ def write_res_tab_to_file(res_table,res_name):
     # turns a dict into a dataframe to save as a csv file
     names = list(res_table.keys())
     values = list(res_table.values())
-    name_list = []
-    # TODO remove this block if no longer needed see line 527
-    for item in names:
-        fix_name = item.strip('][').split(', ')[0].replace("'",'')
-        name_list.append(fix_name)
     
-    res_df = pd.DataFrame([name_list, list(res_table.values())]).T
+
+    column_names = ['Scientific','Strain', 'Count']
+    res_df = pd.DataFrame(columns=column_names)
+   
+    new_row = []
+    for i in range(0,len(names)):
+        curr_name = names[i]
+        for j in range(0,len(values[i])):
+            curr_strain = values[i][j][0]
+            curr_count = values[i][j][1]
+            #print(curr_name," ", curr_strain, " ",curr_count)
+            new_row = pd.DataFrame({'Scientific': [curr_name],
+                'Strain': [curr_strain], 
+                'Count': [curr_count]})
+            res_df = res_df.append(new_row, ignore_index=True)
+           
+            
     res_df.to_csv(res_name,index=False)
     return res_df
 
@@ -544,17 +536,15 @@ def main(arg):
     i=0
     for item in batch_list:
         bar.update(i)
-        res_table, current_db, strain_dict = query_ncbi_xml(item, current_db, Entrez.api_key,verbose)
+        res_table, current_db, strain_dict = query_ncbi_xml(item, current_db, Entrez.api_key, verbose)
         #TODO see if this makes sense after getting to the lower logic
         for item in list(res_table.keys()):
-            #print(item)
+            print("res_table_key :",item)
+            print("res_table_value: ",list(res_table.values()) )
             if item in result_table:
-                #print(res_table.get(item))
                 result_table[item] = result_table[item] + res_table.get(item)
-                #result_table[item].append(res_table.get(item))
             else:
                 result_table[item] = res_table.get(item)
-                #result_table[item] = [res_table.get(item)]
 
         for item in strain_dict.keys():
             if item in strain_table:
@@ -574,10 +564,11 @@ def main(arg):
     # save database to disk
     write_db_to_file(current_db,db_name)
     # save query results to disk
+    
     res_df = write_res_tab_to_file(result_table,res_name)
 
     #TODO update with more params
-    strain_df = write_res_tab_to_file(strain_table,"strain_table.csv")
+    #strain_df = write_res_tab_to_file(strain_table,"strain_table.csv")
 
     # calculates geometric mean of average query coverage for each record
     sci_query_coverage_dict, missing_qc_acc = convert_acc_query_coverage_dict_to_sci_qc_dict(current_db, query_coverage_dict)
@@ -601,7 +592,7 @@ def main(arg):
     qc_id_table.columns = ['ave_query_coverage','ave_identitiy']
 
     # renames columns and sets index to taxa as opposed to numeric
-    res_df.columns = ['taxa','count']
+    res_df.columns = ['taxa', 'strain','count']
     res_df.set_index('taxa', inplace=True)
     qc_id_table.index.name = 'taxa'
 
