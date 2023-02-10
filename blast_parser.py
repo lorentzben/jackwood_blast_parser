@@ -67,61 +67,92 @@ def update_strain_tuples(strain, count, strain_count_list):
 def collect_first_records(blast_frame):
     # Loads the blast result file to memory
     blast_file = open(blast_frame, 'r')
-    Lines = blast_file.readlines()
+    line = blast_file.readlines()
+
+    acc_dict = {}
+    per_q_dict = {}
+    per_i_dict = {}
+    count=0
+
+    record_list_of_list = []
+    
+    last_hash = True
+    for record in line:
+        chunk = []
+        #print("last_hash: ", last_hash)
+        if not record.startswith('#') and last_hash :
+            chunk.append(record)
+            record_list_of_list.append(chunk)
+            last_hash = False
+        if not record.startswith('#') and not last_hash:
+            last_hash = False
+        if record.startswith('#') and last_hash:
+            last_hash = True
+        if record.startswith('#') and not last_hash:
+            last_hash = True
+
+    '''
+    # This method code is used if you want all records to be examined, it will make you results inflated approx 10x based on blast hits.
+    last_hash = True
+    chunk = []
+    for record in line:
+        
+        #print("last_hash: ", last_hash)
+        if not record.startswith('#') and last_hash :
+            last_hash = False
+        if not record.startswith('#') and not last_hash:
+            chunk.append(record)
+            last_hash = False
+        if record.startswith('#') and last_hash:
+            last_hash = True
+        if record.startswith('#') and not last_hash:
+            record_list_of_list.append(chunk)
+            chunk = []
+            last_hash = True
+    '''
 
     # instantiates dicts for accessions, and coverage stats
-    hash_start = False
     acc_dict = {}
     per_q_dict = {}
     per_i_dict = {}
     count=0
     # iterates over each line and uses the hash from comments to determine which record is first
-    for line in Lines:
-        if line[0] == "#":
-            hash_start = True
-        if hash_start == True and line[0] != "#":
+    for record in record_list_of_list:
+        #print(record)
+        for line in record:
             # since this is a csv like document we can select indicies as values
             acc = str.split(line, ",")[1]
             perc_query = str.split(line,",")[5]
             perc_ident = str.split(line,",")[6]
+            #print("acc: ", acc," perc_query: ", perc_query, " perc_ident: ", perc_ident)
             # checks if value exists in the accession dict and adds it if not 
             if acc not in acc_dict.keys():
                 acc_dict[acc] = 1
-                hash_start= False
-                count= count+1
+                count= count + 1
+                #print('added accession: ', count)
             # checks if value exists in the accession dict and increases count 
-            if acc in acc_dict.keys():
+            elif acc in acc_dict.keys():
                 acc_dict[acc] = acc_dict[acc] + 1
-                hash_start = False
-                count = count+1
+                count = count + 1
+                #print('updated accession: ', count)
             # performs same check as accessions but creates a list of coverages
             if acc not in per_q_dict.keys():
                 per_q_dict[acc] = list([float(perc_query)])
-                hash_start = False
-            if acc in per_q_dict.keys():
+            elif acc in per_q_dict.keys():
                 per_q_dict[acc].append(float(perc_query))
-                hash_start = False
             if acc not in per_i_dict.keys():
                 per_i_dict[acc] = list([float(perc_ident)])
-                hash_start = False
-            if acc in per_i_dict.keys():
-                 per_i_dict[acc].append(float(perc_query))
-                 hash_start = False
-        
-        
-                 
-        #Swap these hash starts to use all of the records in the file
-        #elif hash_start == True and line[0] == "#":
-        #    hash_start = False
-        #    continue
-
+            elif acc in per_i_dict.keys():
+                per_i_dict[acc].append(float(perc_query))
+       
+    
     gc.collect()
     # sorts accession dict so that the most popular accessions are at top to speed up quering.
-    print("record count: "+str(count))
+    print("record count: ", count)
     acc_dict_sorted = sorted(
         acc_dict.items(), key=lambda x: x[1], reverse=True)
+    #print(acc_dict_sorted)
     return [acc_dict_sorted, per_q_dict, per_i_dict]
-
 
 def initiate_database():
     # intiates an empty dataframe with headers
