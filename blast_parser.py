@@ -75,20 +75,21 @@ def collect_first_records(blast_frame):
     count=0
 
     record_list_of_list = []
-    
+    chunk = []
     last_hash = True
     for record in line:
-        chunk = []
+        
         #print("last_hash: ", last_hash)
         if not record.startswith('#') and last_hash :
             chunk.append(record)
-            record_list_of_list.append(chunk)
             last_hash = False
         if not record.startswith('#') and not last_hash:
             last_hash = False
         if record.startswith('#') and last_hash:
             last_hash = True
         if record.startswith('#') and not last_hash:
+            record_list_of_list.append(chunk)
+            chunk = []
             last_hash = True
 
     '''
@@ -148,6 +149,7 @@ def collect_first_records(blast_frame):
     
     gc.collect()
     # sorts accession dict so that the most popular accessions are at top to speed up quering.
+    # if the record count does not match # BLAST processed XXXX queries it is because you had queries with 0 hits, do not worry
     print("record count: ", count)
     acc_dict_sorted = sorted(
         acc_dict.items(), key=lambda x: x[1], reverse=True)
