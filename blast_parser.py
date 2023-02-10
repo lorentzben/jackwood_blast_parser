@@ -382,8 +382,12 @@ def create_batches(accesion_list, batch_size, divider):
 def calc_batch_size(accesion_list):
     # determines how many batches can be constructed based on divider
     print("accession_count: "+str(len(accesion_list)))
+    
     divider = 200
-    size = round(len(accesion_list)/divider)
+    if len(accesion_list) > divider:
+        size = round(len(accesion_list)/divider)
+    else:
+        size = len(accesion_list)
     return size, divider
 
 def write_db_to_file(current_database,db_name):
