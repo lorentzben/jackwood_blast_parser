@@ -18,6 +18,7 @@ import xml.etree.ElementTree as ET
 import gc
 import pickle
 import csv
+from collections import defaultdict
 
 
 def xml_to_dict(xml_str):
@@ -369,17 +370,29 @@ def query_ncbi(accesion_list, current_database):
     
 
 def create_batches(accesion_list, batch_size, divider):
+
+    '''
+    if batch_size*divider < len(accesion_list): 
+        divider = len(accesion_list)
+        size = 1
+    '''
+
     batch_list = []
     # subsets long list by the provided divider and returns a list
     for i in range(0, divider):
         first_index = i*batch_size
         second_index = first_index + batch_size
+        #print("first index: ", first_index, " second index ", second_index)
         batch_list.append(accesion_list[first_index:second_index])
+    #print("leftover indicies",batch_size*divider, ' : ',len(accesion_list))
+    batch_list.append(accesion_list[batch_size*divider:len(accesion_list)])
+    #print("accession list: ", accesion_list)
+    #print("batch list: ", batch_list)
     gc.collect()
     return batch_list
 
 
-def calc_batch_size(accesion_list):
+def calc_batch_size(accesion_list, acc_len):
     # determines how many batches can be constructed based on divider
     print("accession_count: "+str(len(accesion_list)))
     
@@ -388,6 +401,9 @@ def calc_batch_size(accesion_list):
         size = round(len(accesion_list)/divider)
     else:
         size = len(accesion_list)
+        
+
+    #print("size: ", size, " divider: ", divider)
     return size, divider
 
 def write_db_to_file(current_database,db_name):
@@ -433,6 +449,8 @@ def convert_acc_query_coverage_dict_to_sci_qc_dict(database, query_acc_dict):
     sci_qc_dict = {}
     missing_acc = []
 
+    
+
     #qafile = open('query_acc_dict.bjl', 'ab')
     #pickle.dump(query_acc_dict,qafile)
     #qafile.close()
@@ -440,18 +458,25 @@ def convert_acc_query_coverage_dict_to_sci_qc_dict(database, query_acc_dict):
     # iterates through the database and checks for accessions, either adds or updates query coverage values
 
     for item in database.iterrows():
+        
         sci_name = item[1][2]
+        strain = item[1][3]
         acc = item[1][0]
+        #print("acc " , acc, " acc dict get ", query_acc_dict.get(acc))
         if sci_name not in sci_qc_dict:
-            if query_acc_dict.get(acc) != None:
-                sci_qc_dict[sci_name] = query_acc_dict.get(acc)
+            if strain != "Unknown":
+                if query_acc_dict.get(acc) != None:
+                    sci_qc_dict[sci_name] = [(strain, query_acc_dict.get(acc))]
+            else:
+                if query_acc_dict.get(acc) != None:
+                    sci_qc_dict[sci_name] = [(strain, query_acc_dict.get(acc))]
         elif sci_name in sci_qc_dict:
             try:
-                val_list = query_acc_dict.get(acc)
-                #print("valist: " + str(val_list))
-                for value in val_list:
-                    #print("value: " + str(value))
-                    list(sci_qc_dict[sci_name]).append(value)
+                if strain != "Unknown":
+                    sci_qc_dict[sci_name] = update_strain_tuples(strain, query_acc_dict.get(acc), sci_qc_dict.get(sci_name))
+                else:
+                    sci_qc_dict[sci_name] = [("Unknown", query_acc_dict.get(acc))]
+                
             except TypeError as ex3:
                 missing_acc.append(acc)
 
@@ -462,6 +487,7 @@ def convert_acc_query_coverage_dict_to_sci_qc_dict(database, query_acc_dict):
     #dbfile = open("database.bjl", 'ab')
     #pickle.dump(database,dbfile )
     #dbfile.close()
+    #print(sci_qc_dict)
     return sci_qc_dict, missing_acc
 
 def convert_acc_identify_dict_to_sci_ident_dict(database, ident_acc_dict):
@@ -477,17 +503,23 @@ def convert_acc_identify_dict_to_sci_ident_dict(database, ident_acc_dict):
 
     for item in database.iterrows():
         sci_name = item[1][2]
+        strain = item[1][3]
         acc = item[1][0]
+        #print("acc ", acc, " ident acc get ",ident_acc_dict.get(acc))
         if sci_name not in sci_id_dict:
-            if ident_acc_dict.get(acc) != None:
-                sci_id_dict[sci_name] = ident_acc_dict.get(acc)
+            if strain != "Unknown":
+                if ident_acc_dict.get(acc) != None:
+                    sci_id_dict[sci_name] = [(strain, ident_acc_dict.get(acc))]
+            else:
+                if ident_acc_dict.get(acc) != None:
+                    sci_id_dict[sci_name] = [(strain, ident_acc_dict.get(acc))]
+                #sci_id_dict[sci_name] = ident_acc_dict.get(acc)
         elif sci_name in sci_id_dict:
             try:
-                val_list = ident_acc_dict.get(acc)
-                #print("valist: " + str(val_list))
-                for value in val_list:
-                    #print("value: " + str(value))
-                    list(sci_id_dict[sci_name]).append(value)
+                if strain != "Unknown":
+                    sci_id_dict[sci_name] = update_strain_tuples(strain, ident_acc_dict.get(acc), sci_id_dict.get(sci_name))
+                else:
+                    sci_id_dict[sci_name] = [("Unknown", ident_acc_dict.get(acc))]
             except TypeError as ex3:
                 missing_acc.append(acc)
     #mafile = open('missing_acc.bjl', 'ab')
@@ -497,6 +529,7 @@ def convert_acc_identify_dict_to_sci_ident_dict(database, ident_acc_dict):
     #dbfile = open("database.bjl", 'ab')
     #pickle.dump(database,dbfile )
     #dbfile.close()
+    #print(sci_id_dict)
     return sci_id_dict, missing_acc
 
 
@@ -504,8 +537,17 @@ def calc_average_query_coverage_per_species (query_sci_dict):
     # iterates over each specie name and calculates the geometric mean for query coverage
     average_q_dict = {}
     for item in query_sci_dict.keys():
+        #print(item)
         query_list = query_sci_dict[item]
-        average_q_dict[item] = g_mean(query_list)
+        for strain in query_list:
+            #print("strain: ", strain[0], " value: ", strain[1])
+            if item not in average_q_dict:
+                #print("adding ", strain[0], " value ", g_mean(strain[1]))
+                average_q_dict[item] = [(strain[0], g_mean(strain[1]))]
+            elif item in average_q_dict:
+                #print("updating ", strain[0], " value ", g_mean(strain[1]))
+                average_q_dict[item].append((strain[0], g_mean(strain[1])))
+    
     return(average_q_dict)
         
 
@@ -514,7 +556,12 @@ def calc_average_identity_coverage_per_species (id_sci_dict):
     average_id_dict = {}
     for item in id_sci_dict.keys():
         id_list = id_sci_dict[item]
-        average_id_dict[item] = g_mean(id_list)
+        for strain in id_list:
+            if item not in average_id_dict:
+                average_id_dict[item] = [(strain[0], g_mean(strain[1]))]
+            elif item in average_id_dict:
+                average_id_dict[item].append((strain[0], g_mean(strain[1])))
+
     return(average_id_dict)
 
 def main(arg):
@@ -536,10 +583,11 @@ def main(arg):
     #print(identity_dict)
 
     # determines batch size so as not to overload querying 
-    batch_size , divider = calc_batch_size(blast_dict)
+    batch_size , divider = calc_batch_size(blast_dict, len(blast_dict))
 
     # divides query list into batches
     batch_list = create_batches(blast_dict, batch_size, divider)
+    #print(batch_list)
     
     # checks for existing database if none present creates new empty
     if arg.database:
@@ -569,7 +617,7 @@ def main(arg):
     # iterates through batch list and queries ncbi for records, checks if record currently exists and adds or updates 
     result_table = {}
     strain_table = {}
-    bar = progressbar.ProgressBar(max_value=divider)
+    bar = progressbar.ProgressBar(max_value=len(batch_list))
     i=0
     for item in batch_list:
         bar.update(i)
@@ -624,6 +672,9 @@ def main(arg):
     # calculates geometric mean of average identity coverage for each species
     identity_dict = calc_average_identity_coverage_per_species(sci_id_coverage_dict)
     
+    # TODO need to use something like write_res_tab_to_file to make two DFs that can be merged on the species then strain cols
+    # The result can be merged to the original data, and then written to file
+
     # joins average query coverage and average identity coverage into a two column table
     qc_id_table = pd.concat([pd.DataFrame(query_coverage_dict, index=[0]).T,pd.DataFrame(identity_dict, index=[0]).T], axis=1)
     qc_id_table.columns = ['ave_query_coverage','ave_identitiy']
