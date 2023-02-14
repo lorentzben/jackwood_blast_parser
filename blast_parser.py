@@ -19,6 +19,10 @@ import gc
 import pickle
 import csv
 from collections import defaultdict
+import warnings
+
+warnings.filterwarnings(action='ignore', category=FutureWarning)
+
 
 
 def xml_to_dict(xml_str):
@@ -255,7 +259,11 @@ def query_ncbi_xml(accesion_list, current_database, api_key,verb):
         count = 0
         sci_names = []
 
-        soup_sci = BeautifulSoup(sci_req,'lxml')
+        # from https://stackoverflow.com/a/14463362
+
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")
+            soup_sci = BeautifulSoup(sci_req,'lxml')
 
         # Strain isolate information gathering
         qualifiers = soup_sci.findAll("gbqualifier")
@@ -299,16 +307,19 @@ def query_ncbi_xml(accesion_list, current_database, api_key,verb):
             p = p+1
         gc.collect()
 
-        
-            
-        soup_tax = BeautifulSoup(tax_req, 'lxml')
+        #from https://stackoverflow.com/a/14463362
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")    
+            soup_tax = BeautifulSoup(tax_req, 'lxml')
         tax_res = soup_tax.findAll("item")
         i = 0
         j = 0
         
         # links tax id to accession number 
+        #tax_res[i]
         for item in tax_res:
-            if tax_res[i]['name'] == "TaxId":
+            #print("item:" , item, " i: ",i)
+            if item['name'] == "TaxId":
                 #print("i, j: " +str(i)+" "+str(j))
                 curr_id = tax_res[i].text
                 try:
@@ -318,17 +329,20 @@ def query_ncbi_xml(accesion_list, current_database, api_key,verb):
                 #print("current_id: "+curr_id)
                 #print("length scinames", len(sci_names))
                 #print("length strain", len(strainlist))
+
                 new_row = pd.DataFrame({'Accession':[unzipped[0][j]], 
                 'TaxID':[str(curr_id)], 
                 'Scientific':[sci_names[j]],
                 'Strain':[curr_strain]})
                 db = db.append(new_row, ignore_index=True)
                 j = j+1
+                #print(new_row)
+                
             i = i+1
         gc.collect()
         #print(sci_dict)
         #print(db)
-        
+    
         #print(strain_dict)
     return(sci_dict, db, strain_dict)
     
@@ -434,6 +448,28 @@ def write_res_tab_to_file(res_table,res_name):
             
     res_df.to_csv(res_name,index=False)
     return res_df
+
+def dict_list_tuples_to_dataframe(dict_to_mod, third_col):
+    # turns a dict into a dataframe to save as a csv file
+    names = list(dict_to_mod.keys())
+    values = list(dict_to_mod.values())
+
+    column_names = ['taxa','strain', third_col]
+    res_df = pd.DataFrame(columns=column_names)
+
+    new_row = []
+    for i in range(0,len(names)):
+        curr_name = names[i]
+        for j in range(0,len(values[i])):
+            curr_strain = values[i][j][0]
+            curr_count = values[i][j][1]
+            #print(curr_name," ", curr_strain, " ",curr_count)
+            new_row = pd.DataFrame({'taxa': [curr_name],
+                'strain': [curr_strain], 
+                third_col:  [curr_count]})
+            res_df = res_df.append(new_row, ignore_index=True)
+    return res_df
+
 
 def g_mean(x):
     # from https://www.statology.org/geometric-mean-python/
@@ -577,7 +613,8 @@ def main(arg):
     blast_name = arg.blast_output
     # Selects first record from each blast result as well as percent query and identity 
     blast_dict, query_coverage_dict, identity_dict = collect_first_records(blast_name)
-
+    #print(blast_dict)
+    #print(len(blast_dict))
     # diagnostic print statments
     #print(query_coverage_dict)
     #print(identity_dict)
@@ -675,20 +712,21 @@ def main(arg):
     # TODO need to use something like write_res_tab_to_file to make two DFs that can be merged on the species then strain cols
     # The result can be merged to the original data, and then written to file
 
-    # joins average query coverage and average identity coverage into a two column table
-    qc_id_table = pd.concat([pd.DataFrame(query_coverage_dict, index=[0]).T,pd.DataFrame(identity_dict, index=[0]).T], axis=1)
-    qc_id_table.columns = ['ave_query_coverage','ave_identitiy']
+    qc_df = dict_list_tuples_to_dataframe(query_coverage_dict, 'ave_query_coverage')
+    id_df = dict_list_tuples_to_dataframe(identity_dict, 'ave_identitiy')
+
+    ave_df = pd.merge(qc_df, id_df,  how='left', left_on=['taxa','strain'], right_on = ['taxa','strain'])
+    
+    
 
     # renames columns and sets index to taxa as opposed to numeric
     res_df.columns = ['taxa', 'strain','count']
     res_df.set_index('taxa', inplace=True)
-    qc_id_table.index.name = 'taxa'
 
-    # joins species and coverage tables 
-    joined_table = res_df.join(qc_id_table, how='outer')
-
+    more_info_df = ave_df = pd.merge(res_df, ave_df,  how='left', left_on=['taxa','strain'], right_on = ['taxa','strain'])
+    
     # saves joined table to disk
-    joined_table.to_csv(res_name[:-4]+"_more_info.csv",index=True)
+    more_info_df.to_csv(res_name[:-4]+"_more_info.csv",index=False)
 
    
     # print(batch_list)
