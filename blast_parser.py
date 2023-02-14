@@ -625,9 +625,6 @@ def main(arg):
     
     res_df = write_res_tab_to_file(result_table,res_name)
 
-    #TODO update with more params
-    #strain_df = write_res_tab_to_file(strain_table,"strain_table.csv")
-
     # calculates geometric mean of average query coverage for each record
     sci_query_coverage_dict, missing_qc_acc = convert_acc_query_coverage_dict_to_sci_qc_dict(current_db, query_coverage_dict)
 
