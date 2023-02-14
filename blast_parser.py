@@ -3,7 +3,6 @@
 import Bio
 from lxml import objectify as xml_objectify
 from Bio import Entrez
-import time
 import os
 import argparse
 import os
@@ -16,7 +15,6 @@ import lxml
 from bs4 import BeautifulSoup
 import xml.etree.ElementTree as ET
 import gc
-import pickle
 import csv
 from collections import defaultdict
 import warnings
@@ -53,8 +51,7 @@ def retrieve_strain_from_list_of_dict(xml_dict_list):
     return strain_list
 
 def update_strain_tuples(strain, count, strain_count_list):
-    updated_list_of_tuples = []
-
+   
     unzipped = [[i for i, j in strain_count_list],
                 [j for i, j in strain_count_list]]
 
@@ -346,43 +343,7 @@ def query_ncbi_xml(accesion_list, current_database, api_key,verb):
         #print(strain_dict)
     return(sci_dict, db, strain_dict)
     
-
-def query_ncbi(accesion_list, current_database):
-    # TODO Not actually implemented, was a intermediary development method
-    sci_dict = {}
-    count = 0
-
-    # splits the accession number and count
-    unzipped = [[i for i, j in accesion_list],
-                [j for i, j in accesion_list]]
-
-    # saves accession and count to disk (can be turned off)
-    pd.DataFrame(unzipped[0]).to_csv("accession.csv",index=False)
-    pd.DataFrame(unzipped[1]).to_csv("count.csv",index=False)
-    #print(unzipped[0][0] +' ,'+ ' ,'.join(unzipped[0][1:]))
-
-    # this reads the query into memory similar to how you open a file in python for scientific names
-    tax_handle = Entrez.efetch(db="Nucleotide", id=unzipped[0][0] +' ,'+ ' ,'.join(unzipped[0][1:]), retmode="xml")
-    record = Entrez.read(tax_handle)
-
-    # this reads the query into memory similar to how you open a file in python for tax ids
-    tax_id_handle = Entrez.esummary(db="Nucleotide", id=unzipped[0][0] +' ,'+ ' ,'.join(unzipped[0][1:]), retmode="xml")
-    tax_records = Entrez.read(tax_id_handle)
-
-    # goes through accession resutlts and constructs a result tabl 
-    for i in range(0,len(record)): 
-        tax_name = record[i]['GBSeq_source']
-        tax_id = int(tax_records[i]["TaxId"])
-        if tax_name in sci_dict:
-            sci_dict[tax_name] = sci_dict[tax_name] + unzipped[1][i]
-        else:
-            sci_dict[tax_name] = unzipped[1][i]
-        new_row = [unzipped[0][i],str(tax_id),tax_name]
-        current_database.loc[len(current_database)]= new_row
-
-    return(sci_dict, current_database)
-    
-
+ 
 def create_batches(accesion_list, batch_size, divider):
 
     '''
@@ -485,12 +446,6 @@ def convert_acc_query_coverage_dict_to_sci_qc_dict(database, query_acc_dict):
     sci_qc_dict = {}
     missing_acc = []
 
-    
-
-    #qafile = open('query_acc_dict.bjl', 'ab')
-    #pickle.dump(query_acc_dict,qafile)
-    #qafile.close()
-
     # iterates through the database and checks for accessions, either adds or updates query coverage values
 
     for item in database.iterrows():
@@ -516,24 +471,12 @@ def convert_acc_query_coverage_dict_to_sci_qc_dict(database, query_acc_dict):
             except TypeError as ex3:
                 missing_acc.append(acc)
 
-    #mafile = open('missing_acc.bjl', 'ab')
-    #pickle.dump(missing_acc, mafile)
-    #mafile.close()
-
-    #dbfile = open("database.bjl", 'ab')
-    #pickle.dump(database,dbfile )
-    #dbfile.close()
-    #print(sci_qc_dict)
     return sci_qc_dict, missing_acc
 
 def convert_acc_identify_dict_to_sci_ident_dict(database, ident_acc_dict):
     database = database.sort_values(by='Scientific')
     sci_id_dict = {}
     missing_acc = []
-
-    #idfile = open('id_acc_dict.bjl', 'ab')
-    #pickle.dump(query_acc_dict,idfile)
-    #idfile.close()
 
     # iterates through the database and checks for accessions, either adds or updates identity coverage values
 
@@ -558,14 +501,7 @@ def convert_acc_identify_dict_to_sci_ident_dict(database, ident_acc_dict):
                     sci_id_dict[sci_name] = [("Unknown", ident_acc_dict.get(acc))]
             except TypeError as ex3:
                 missing_acc.append(acc)
-    #mafile = open('missing_acc.bjl', 'ab')
-    #pickle.dump(missing_acc, mafile)
-    #mafile.close()
-
-    #dbfile = open("database.bjl", 'ab')
-    #pickle.dump(database,dbfile )
-    #dbfile.close()
-    #print(sci_id_dict)
+    
     return sci_id_dict, missing_acc
 
 
